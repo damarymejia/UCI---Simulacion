@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Simulador Arduino UCI — ATmega328P</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --bg:#020617;
+    --bg2:#0d1117;
+    --bg3:#111827;
+    --bg4:#1e2a3a;
+    --border:#1f2937;
+    --border2:#374151;
+    --text:#e2e8f0;
+    --text2:#94a3b8;
+    --text3:#64748b;
+    --blue:#3B8BD4;
+    --blue-d:#185FA5;
+    --blue-bg:rgba(59,139,212,.1);
+    --green:#4ade80;
+    --green2:#639922;
+    --amber:#EF9F27;
+    --amber-d:#BA7517;
+    --red:#f87171;
+    --red2:#D85A30;
+    --red-bg:rgba(216,90,48,.12);
+    --purple:#a78bfa;
+    --font-mono:'Courier New',Courier,monospace;
+  }
+  html,body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:13px;
+    min-height:100vh;
+    padding:16px;
+  }
+
+  /* ── HEADER ── */
+  .header{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    flex-wrap:wrap;gap:12px;margin-bottom:14px;
+  }
+  .header h1{font-size:17px;font-weight:700;color:#fff;letter-spacing:.02em;}
+  .header p{font-size:11px;color:var(--text3);margin-top:3px;}
+  .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .btn{
+    font-family:var(--font-mono);font-size:11px;padding:5px 14px;
+    border:1px solid var(--border2);border-radius:6px;
+    background:var(--bg3);color:var(--text);cursor:pointer;
+    transition:all .15s;white-space:nowrap;
+  }
+  .btn:hover{background:var(--bg4);border-color:var(--blue);}
+  .btn.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue);}
+  .btn.danger{background:var(--red-bg);border-color:var(--red2);color:var(--red);}
+
+  /* ── CYCLE BAR ── */
+  .cycle-bar{
+    display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:8px;padding:8px 12px;margin-bottom:12px;
+  }
+  .cs{
+    font-size:10px;padding:3px 9px;border-radius:4px;
+    background:var(--bg2);border:1px solid var(--border);
+    color:var(--text3);transition:all .25s;white-space:nowrap;
+  }
+  .cs.current{background:var(--blue-bg);border-color:var(--blue);color:var(--blue);font-weight:700;}
+  .cs.done{background:rgba(99,153,34,.12);border-color:var(--green2);color:var(--green2);}
+  .cs-arr{color:var(--text3);font-size:11px;}
+
+  /* ── MAIN GRID ── */
+  .board{
+    display:grid;
+    grid-template-columns:130px 1fr 130px;
+    gap:10px;
+    background:var(--bg3);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px;
+    margin-bottom:12px;
+  }
+
+  /* ── SENSOR COLUMN ── */
+  .col-title{
+    font-size:9px;font-weight:700;color:var(--text3);
+    letter-spacing:.08em;text-transform:uppercase;
+    margin-bottom:6px;
+  }
+  .sensor-card{
+    background:var(--bg2);border:1px solid var(--border);
+    border-radius:6px;padding:7px 9px;cursor:pointer;
+    transition:border-color .2s;margin-bottom:5px;
+  }
+  .sensor-card:hover{border-color:var(--border2);}
+  .sensor-card.pulsing{border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,139,212,.2);}
+  .s-label{font-size:9px;color:var(--text3);}
+  .s-val{font-size:12px;font-weight:700;color:var(--text);margin:2px 0;}
+  .s-bit{font-size:9px;color:var(--blue);}
+  .s-bit.alert{color:var(--amber);}
+  .s-bit.crit{color:var(--red);}
+  .s-hint{font-size:9px;color:var(--text3);margin-top:6px;line-height:1.4;}
+
+  /* ── CPU CORE ── */
+  .cpu-core{
+    background:var(--bg2);border:1px solid var(--border2);
+    border-radius:8px;padding:10px;
+    display:flex;flex-direction:column;gap:9px;
+  }
+
+  /* REGISTERS */
+  .reg-row{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+  .reg{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:4px;padding:4px 6px;text-align:center;
+    transition:all .25s;
+  }
+  .reg.loaded{border-color:var(--blue);background:var(--blue-bg);}
+  .reg-name{font-size:8px;color:var(--text3);}
+  .reg-val{font-size:10px;font-weight:700;color:var(--text);margin-top:1px;}
+
+  /* ALU */
+  .alu{
+    background:var(--bg3);border:1px solid var(--border2);
+    border-radius:6px;padding:8px;text-align:center;
+  }
+  .alu-label{font-size:9px;color:var(--text3);letter-spacing:.06em;}
+  .alu-op{font-size:14px;font-weight:700;color:var(--text);min-height:20px;margin:4px 0 2px;transition:color .3s;}
+  .alu-op.computing{color:var(--green2);}
+  .alu-detail{font-size:9px;color:var(--text3);}
+
+  /* MEMORY BLOCKS */
+  .mem-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .mem-block{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:6px;padding:8px;
+  }
+  .mem-title{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.06em;margin-bottom:5px;}
+  .mem-cells{display:flex;flex-wrap:wrap;gap:2px;}
+  .cell{
+    width:12px;height:12px;border-radius:2px;
+    background:var(--bg2);border:1px solid var(--border);
+    transition:all .3s;font-size:6px;
+    display:flex;align-items:center;justify-content:center;color:transparent;
+  }
+  .cell.exec{background:var(--green2);border-color:#3B6D11;}
+  .cell.active{background:var(--blue);border-color:var(--blue-d);}
+  .cell.hot{background:var(--amber);border-color:var(--amber-d);}
+  .cell.out{background:var(--red2);border-color:#993C1D;}
+  .cell.preload{background:rgba(99,153,34,.18);border-color:rgba(99,153,34,.4);}
+
+  /* BUS SVG */
+  .bus-svg{width:100%;height:50px;display:block;}
+
+  /* ── GPIO COLUMN ── */
+  .gpio-pin{
+    background:var(--bg2);border:1px solid var(--border);
+    border-radius:6px;padding:7px 9px;margin-bottom:5px;
+    transition:all .3s;
+  }
+  .gpio-pin.active-out{border-color:var(--red2);background:var(--red-bg);}
+  .gpio-pin.active-warn{border-color:var(--amber);background:rgba(239,159,39,.08);}
+  .pin-label{font-size:9px;color:var(--text3);}
+  .pin-state{font-size:11px;font-weight:700;color:var(--text);margin-top:2px;}
+  .pin-state.high{color:var(--red);}
+  .pin-state.warn{color:var(--amber);}
+  .pin-state.ok{color:var(--green);}
+
+  /* UCI STATE PANEL */
+  .uci-panel{
+    background:var(--bg2);border:1px solid var(--border);
+    border-radius:6px;padding:9px;margin-top:5px;
+  }
+  .uci-key{
+    font-size:22px;font-weight:700;letter-spacing:.15em;
+    color:var(--text);margin:3px 0;
+    font-family:var(--font-mono);transition:color .3s;
+  }
+  .uci-key.nivel1{color:var(--blue);}
+  .uci-key.nivel2{color:var(--amber);}
+  .uci-key.nivel3{color:var(--red);}
+  .uci-key.nivel4{color:#ff4444;animation:blink-key .5s infinite;}
+  .uci-nivel{font-size:10px;color:var(--text2);}
+  .uci-resp{font-size:9px;color:var(--text3);margin-top:3px;line-height:1.4;}
+
+  /* ── BOTTOM ROW ── */
+  .bottom-row{display:grid;grid-template-columns:1fr 280px;gap:10px;margin-bottom:10px;}
+
+  /* LOG */
+  .log-panel{
+    background:#0d1117;border:1px solid var(--border);
+    border-radius:8px;padding:10px;
+    height:150px;overflow-y:auto;
+    display:flex;flex-direction:column-reverse;
+  }
+  .log-line{
+    font-size:10px;line-height:1.7;
+    font-family:var(--font-mono);
+    color:#4ade80;
+    border-left:2px solid rgba(74,222,128,.25);
+    padding-left:6px;
+  }
+  .log-line.warn{color:var(--amber);border-left-color:rgba(239,159,39,.3);}
+  .log-line.err{color:var(--red);border-left-color:rgba(248,113,113,.3);}
+  .log-line.info{color:var(--blue);border-left-color:rgba(59,139,212,.3);}
+
+  /* SPEED PANEL */
+  .speed-panel{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:8px;padding:10px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .speed-title{font-size:9px;color:var(--text3);letter-spacing:.06em;}
+  .speed-row{display:flex;align-items:center;gap:8px;}
+  .speed-row label{font-size:10px;color:var(--text2);white-space:nowrap;}
+  input[type=range]{flex:1;accent-color:var(--blue);}
+
+  /* STATUS BAR */
+  .status-bar{
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:6px;padding:7px 12px;font-size:10px;color:var(--text3);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle;}
+  .dot.green{background:var(--green2);animation:blink-dot 1.4s infinite;}
+  .dot.amber{background:var(--amber);}
+  .dot.red{background:var(--red2);animation:blink-dot .6s infinite;}
+  .dot.gray{background:var(--border2);}
+  .status-bar span:last-child{margin-left:auto;color:var(--text2);}
+
+  /* SENSOR INPUT SLIDERS */
+  .slider-section{
+    background:var(--bg3);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;margin-bottom:12px;
+  }
+  .slider-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;}
+  .slider-item{display:flex;flex-direction:column;gap:3px;}
+  .slider-label{font-size:9px;color:var(--text3);}
+  .slider-val{font-size:11px;font-weight:700;color:var(--text);}
+  .slider-item input{width:100%;accent-color:var(--blue);}
+  .slider-bit{
+    font-size:9px;text-align:center;padding:1px 4px;border-radius:3px;
+    font-weight:700;margin-top:1px;
+  }
+  .slider-bit.bit0{color:var(--text3);background:var(--bg2);}
+  .slider-bit.bit1{color:var(--red);background:var(--red-bg);}
+
+  @keyframes blink-dot{0%,100%{opacity:1}50%{opacity:.25}}
+  @keyframes blink-key{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes pulse-card{
+    0%{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,139,212,.2);}
+    100%{border-color:var(--border);box-shadow:none;}
+  }
+  .pulsing{animation:pulse-card .8s ease-out forwards;}
+
+  @media(max-width:700px){
+    .board{grid-template-columns:1fr;}
+    .slider-grid{grid-template-columns:repeat(2,1fr);}
+    .bottom-row{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>⚡ Simulador Arduino UCI — ATmega328P</h1>
+    <p>Arquitectura Harvard · 16 MHz · 2KB SRAM · 32KB Flash · 1KB EEPROM · 32 estados binarios</p>
+  </div>
+  <div class="controls">
+    <button class="btn active" id="btn-run" onclick="toggleRun()">⏸ Pausar</button>
+    <button class="btn" onclick="triggerManual()">⚡ Evento UCI</button>
+    <button class="btn" id="btn-speed" onclick="cycleSpeed()">🐢 Lento</button>
+    <button class="btn" onclick="resetAll()">↺ Reset</button>
+  </div>
+</div>
+
+<!-- CYCLE BAR -->
+<div class="cycle-bar">
+  <span id="cs0" class="cs">1. FETCH</span><span class="cs-arr">→</span>
+  <span id="cs1" class="cs">2. DECODE</span><span class="cs-arr">→</span>
+  <span id="cs2" class="cs">3. EXECUTE</span><span class="cs-arr">→</span>
+  <span id="cs3" class="cs">4. MEM ACCESS</span><span class="cs-arr">→</span>
+  <span id="cs4" class="cs">5. WRITE BACK</span><span class="cs-arr">→</span>
+  <span id="cs5" class="cs">6. GPIO OUT</span>
+</div>
+
+<!-- SENSOR SLIDERS -->
+<div class="slider-section">
+  <div class="col-title">Control de sensores en tiempo real</div>
+  <div class="slider-grid">
+    <div class="slider-item">
+      <span class="slider-label">A — Frec. Cardíaca</span>
+      <span class="slider-val" id="sl-val-A">78 bpm</span>
+      <input type="range" min="25" max="170" value="78" id="sl-A" oninput="updateSensor('A',this.value)">
+      <span class="slider-bit bit0" id="sl-bit-A">bit A = 0</span>
+      <span class="slider-label" style="color:var(--text3)">Alerta: &lt;50 o &gt;100</span>
+    </div>
+    <div class="slider-item">
+      <span class="slider-label">B — Saturación O₂</span>
+      <span class="slider-val" id="sl-val-B">98 %</span>
+      <input type="range" min="65" max="100" value="98" id="sl-B" oninput="updateSensor('B',this.value)">
+      <span class="slider-bit bit0" id="sl-bit-B">bit B = 0</span>
+      <span class="slider-label" style="color:var(--text3)">Alerta: &lt;90%</span>
+    </div>
+    <div class="slider-item">
+      <span class="slider-label">C — Presión Art.</span>
+      <span class="slider-val" id="sl-val-C">120 mmHg</span>
+      <input type="range" min="70" max="190" value="120" id="sl-C" oninput="updateSensor('C',this.value)">
+      <span class="slider-bit bit0" id="sl-bit-C">bit C = 0</span>
+      <span class="slider-label" style="color:var(--text3)">Alerta: &lt;90 o &gt;140</span>
+    </div>
+    <div class="slider-item">
+      <span class="slider-label">D — Frec. Resp.</span>
+      <span class="slider-val" id="sl-val-D">16 r/m</span>
+      <input type="range" min="5" max="35" value="16" id="sl-D" oninput="updateSensor('D',this.value)">
+      <span class="slider-bit bit0" id="sl-bit-D">bit D = 0</span>
+      <span class="slider-label" style="color:var(--text3)">Alerta: &lt;12 o &gt;20</span>
+    </div>
+    <div class="slider-item">
+      <span class="slider-label">E — Temperatura</span>
+      <span class="slider-val" id="sl-val-E">36.5 °C</span>
+      <input type="range" min="34" max="41" step="0.1" value="36.5" id="sl-E" oninput="updateSensor('E',this.value)">
+      <span class="slider-bit bit0" id="sl-bit-E">bit E = 0</span>
+      <span class="slider-label" style="color:var(--text3)">Alerta: &lt;35.5 o &gt;38.0</span>
+    </div>
+  </div>
+</div>
+
+<!-- BOARD -->
+<div class="board">
+
+  <!-- SENSORES -->
+  <div>
+    <div class="col-title">Entradas ADC</div>
+    <div class="sensor-card" id="sc-A">
+      <div class="s-label">A — Frec. Cardíaca</div>
+      <div class="s-val" id="sv-A">78 bpm</div>
+      <div class="s-bit" id="sb-A">ADC: 0x4E</div>
+    </div>
+    <div class="sensor-card" id="sc-B">
+      <div class="s-label">B — Saturación O₂</div>
+      <div class="s-val" id="sv-B">98 %</div>
+      <div class="s-bit" id="sb-B">ADC: 0x63</div>
+    </div>
+    <div class="sensor-card" id="sc-C">
+      <div class="s-label">C — Presión Art.</div>
+      <div class="s-val" id="sv-C">120 mmHg</div>
+      <div class="s-bit" id="sb-C">ADC: 0x78</div>
+    </div>
+    <div class="sensor-card" id="sc-D">
+      <div class="s-label">D — Frec. Resp.</div>
+      <div class="s-val" id="sv-D">16 r/m</div>
+      <div class="s-bit" id="sb-D">ADC: 0x10</div>
+    </div>
+    <div class="sensor-card" id="sc-E">
+      <div class="s-label">E — Temperatura</div>
+      <div class="s-val" id="sv-E">36.5 °C</div>
+      <div class="s-bit" id="sb-E">ADC: 0x24</div>
+    </div>
+  </div>
+
+  <!-- CPU CORE -->
+  <div class="cpu-core">
+
+    <!-- Registers -->
+    <div>
+      <div class="mem-title">REGISTROS DEL PROCESADOR (R0–R7)</div>
+      <div class="reg-row">
+        <div class="reg" id="reg0"><div class="reg-name">R0 (A)</div><div class="reg-val" id="rv0">0x00</div></div>
+        <div class="reg" id="reg1"><div class="reg-name">R1 (B)</div><div class="reg-val" id="rv1">0x00</div></div>
+        <div class="reg" id="reg2"><div class="reg-name">R2 (C)</div><div class="reg-val" id="rv2">0x00</div></div>
+        <div class="reg" id="reg3"><div class="reg-name">R3 (D)</div><div class="reg-val" id="rv3">0x00</div></div>
+        <div class="reg" id="reg4"><div class="reg-name">R4 (E)</div><div class="reg-val" id="rv4">0x00</div></div>
+        <div class="reg" id="reg5"><div class="reg-name">PC</div><div class="reg-val" id="rv5">0x0000</div></div>
+        <div class="reg" id="reg6"><div class="reg-name">SP</div><div class="reg-val" id="rv6">0x8FF</div></div>
+        <div class="reg" id="reg7"><div class="reg-name">SREG</div><div class="reg-val" id="rv7">0x00</div></div>
+      </div>
+    </div>
+
+    <!-- ALU -->
+    <div class="alu">
+      <div class="alu-label">ALU — UNIDAD ARITMÉTICO LÓGICA</div>
+      <div class="alu-op" id="alu-op">En espera...</div>
+      <div class="alu-detail" id="alu-detail">Comparando variables con tabla de umbrales en EEPROM</div>
+    </div>
+
+    <!-- Memory -->
+    <div class="mem-row">
+      <div class="mem-block">
+        <div class="mem-title">FLASH ROM — Programa (32 KB)</div>
+        <div class="mem-cells" id="flash-cells"></div>
+        <div style="font-size:9px;color:var(--text3);margin-top:4px;">Bus instrucciones separado ← Harvard</div>
+      </div>
+      <div class="mem-block">
+        <div class="mem-title">SRAM — Datos en tiempo real (2 KB)</div>
+        <div class="mem-cells" id="sram-cells"></div>
+        <div style="font-size:9px;color:var(--text3);margin-top:4px;">Bus datos separado ← Harvard</div>
+      </div>
+    </div>
+
+    <!-- EEPROM -->
+    <div class="mem-block" style="background:var(--bg3);">
+      <div class="mem-title">EEPROM — Tabla de 32 estados UCI (1 KB)</div>
+      <div class="mem-cells" id="eeprom-cells"></div>
+      <div style="font-size:9px;color:var(--text3);margin-top:4px;">Persistente · Estados A–E precargados en 0x000–0x0FF</div>
+    </div>
+
+    <!-- Bus -->
+    <svg class="bus-svg" viewBox="0 0 500 50">
+      <defs>
+        <marker id="ba" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/>
+        </marker>
+      </defs>
+      <line x1="10" y1="15" x2="490" y2="15" stroke="#3B8BD4" stroke-width="1.2" stroke-dasharray="5 4" opacity=".5"/>
+      <text x="250" y="11" text-anchor="middle" font-size="9" fill="#3B8BD4" opacity=".8" font-family="monospace">BUS DE DATOS</text>
+      <line x1="10" y1="38" x2="490" y2="38" stroke="#639922" stroke-width="1.2" stroke-dasharray="5 4" opacity=".5"/>
+      <text x="250" y="49" text-anchor="middle" font-size="9" fill="#639922" opacity=".8" font-family="monospace">BUS DE INSTRUCCIONES</text>
+      <circle id="pkt-data"  cx="-20" cy="15" r="4" fill="#3B8BD4" opacity="0"/>
+      <circle id="pkt-instr" cx="-20" cy="38" r="4" fill="#639922" opacity="0"/>
+    </svg>
+  </div>
+
+  <!-- GPIO -->
+  <div>
+    <div class="col-title">GPIO / Salidas</div>
+    <div class="gpio-pin" id="gp-led">
+      <div class="pin-label">D13 — LED alerta</div>
+      <div class="pin-state ok" id="gs-led">LOW</div>
+    </div>
+    <div class="gpio-pin" id="gp-buzz">
+      <div class="pin-label">D8 — Buzzer</div>
+      <div class="pin-state ok" id="gs-buzz">OFF</div>
+    </div>
+    <div class="gpio-pin" id="gp-disp">
+      <div class="pin-label">D2–D7 — Display</div>
+      <div class="pin-state" id="gs-disp">---</div>
+    </div>
+    <div class="gpio-pin" id="gp-uart">
+      <div class="pin-label">TX/RX — Serial</div>
+      <div class="pin-state" id="gs-uart">IDLE</div>
+    </div>
+    <div class="gpio-pin" id="gp-irq">
+      <div class="pin-label">INT0 — Interrupción</div>
+      <div class="pin-state ok" id="gs-irq">CLEAR</div>
+    </div>
+
+    <div style="font-size:9px;color:var(--text3);font-weight:700;letter-spacing:.06em;margin:8px 0 4px;">ESTADO UCI</div>
+    <div class="uci-panel">
+      <div style="font-size:9px;color:var(--text3);">Clave binaria activa</div>
+      <div class="uci-key" id="bin-key">00000</div>
+      <div class="uci-nivel" id="uci-nivel">Normal — Baja</div>
+      <div class="uci-resp" id="uci-resp">Paciente estable, monitoreo continuo</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM -->
+<div class="bottom-row">
+  <div class="log-panel" id="log-panel"></div>
+  <div class="speed-panel">
+    <div class="speed-title">Configuración de simulación</div>
+    <div class="speed-row">
+      <label>Velocidad:</label>
+      <input type="range" min="0" max="2" value="0" id="speed-slider" oninput="setSpeed(this.value)">
+      <span id="speed-lbl" style="font-size:10px;color:var(--text2);white-space:nowrap;">🐢 Lento</span>
+    </div>
+    <div style="font-size:9px;color:var(--text3);">Ciclos del procesador: <span id="cycle-count" style="color:var(--blue)">0</span></div>
+    <div style="font-size:9px;color:var(--text3);">Interrupciones: <span id="irq-count" style="color:var(--amber)">0</span></div>
+    <div style="font-size:9px;color:var(--text3);">Leyenda de memoria:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:3px;">
+      <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--green2);color:#fff;">FETCH</span>
+      <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--blue);color:#fff;">DATOS</span>
+      <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--amber);color:#000;">WRITE</span>
+      <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:var(--red2);color:#fff;">GPIO</span>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS -->
+<div class="status-bar">
+  <span><span class="dot green" id="dot-cpu"></span>CPU activo</span>
+  <span><span class="dot amber" id="dot-adc"></span>ADC listo</span>
+  <span><span class="dot gray" id="dot-irq"></span>IRQ</span>
+  <span><span class="dot gray" id="dot-harvard"></span>Harvard Bus OK</span>
+  <span>ATmega328P · 16 MHz</span>
+  <span id="status-msg">Inicializando...</span>
+</div>
+
+<script>
+const TABLE={
+  "00000":{vars:"Ninguna",p:"Baja",n:"Normal",r:"Paciente estable, monitoreo continuo"},
+  "00001":{vars:"E",p:"Baja",n:"Nivel 1",r:"Temperatura extrema detectada"},
+  "00010":{vars:"D",p:"Media-Alta",n:"Nivel 2",r:"Frecuencia respiratoria anormal"},
+  "00011":{vars:"D,E",p:"Alta",n:"Nivel 3",r:"Riesgo respiratorio con temperatura crítica"},
+  "00100":{vars:"C",p:"Alta",n:"Nivel 2",r:"Presión arterial peligrosa"},
+  "00101":{vars:"C,E",p:"Alta",n:"Nivel 3",r:"Presión peligrosa y temperatura extrema"},
+  "00110":{vars:"C,D",p:"Alta",n:"Nivel 3",r:"Compromiso circulatorio y respiratorio"},
+  "00111":{vars:"C,D,E",p:"Muy Alta",n:"Nivel 3",r:"Riesgo multisistémico"},
+  "01000":{vars:"B",p:"Alta",n:"Nivel 2",r:"Saturación de oxígeno baja"},
+  "01001":{vars:"B,E",p:"Alta",n:"Nivel 3",r:"Hipoxia con temperatura extrema"},
+  "01010":{vars:"B,D",p:"Alta",n:"Nivel 3",r:"Hipoxia y dificultad respiratoria"},
+  "01011":{vars:"B,D,E",p:"Muy Alta",n:"Nivel 3",r:"Riesgo respiratorio severo"},
+  "01100":{vars:"B,C",p:"Alta",n:"Nivel 3",r:"Hipoxia y presión crítica"},
+  "01101":{vars:"B,C,E",p:"Muy Alta",n:"Nivel 3",r:"Riesgo cardiovascular severo"},
+  "01110":{vars:"B,C,D",p:"Muy Alta",n:"Nivel 3",r:"Emergencia multisistémica"},
+  "01111":{vars:"B,C,D,E",p:"Crítica",n:"Nivel 3",r:"Estado crítico avanzado"},
+  "10000":{vars:"A",p:"Media",n:"Nivel 1",r:"Frecuencia cardíaca elevada"},
+  "10001":{vars:"A,E",p:"Media",n:"Nivel 2",r:"Alteración cardíaca y térmica"},
+  "10010":{vars:"A,D",p:"Alta",n:"Nivel 3",r:"Riesgo cardíaco y respiratorio"},
+  "10011":{vars:"A,D,E",p:"Muy Alta",n:"Nivel 3",r:"Compromiso cardiopulmonar"},
+  "10100":{vars:"A,C",p:"Alta",n:"Nivel 3",r:"Riesgo cardiovascular elevado"},
+  "10101":{vars:"A,C,E",p:"Muy Alta",n:"Nivel 3",r:"Emergencia cardiovascular"},
+  "10110":{vars:"A,C,D",p:"Muy Alta",n:"Nivel 3",r:"Compromiso cardiocirculatorio"},
+  "10111":{vars:"A,C,D,E",p:"Crítica",n:"Nivel 3",r:"Riesgo fisiológico extremo"},
+  "11000":{vars:"A,B",p:"Alta",n:"Nivel 3",r:"Hipoxia con alteración cardíaca"},
+  "11001":{vars:"A,B,E",p:"Muy Alta",n:"Nivel 3",r:"Riesgo cardíaco con fiebre"},
+  "11010":{vars:"A,B,D",p:"Muy Alta",n:"Nivel 3",r:"Emergencia respiratoria"},
+  "11011":{vars:"A,B,D,E",p:"Crítica",n:"Nivel 3",r:"Emergencia cardiopulmonar"},
+  "11100":{vars:"A,B,C",p:"Muy Alta",n:"Nivel 3",r:"Compromiso cardiovascular severo"},
+  "11101":{vars:"A,B,C,E",p:"Crítica",n:"Nivel 3",r:"Estado crítico multisistémico"},
+  "11110":{vars:"A,B,C,D",p:"Crítica",n:"Nivel 3",r:"Emergencia médica mayor"},
+  "11111":{vars:"A,B,C,D,E",p:"Máxima",n:"Nivel 4",r:"Emergencia total UCI — protocolo crítico total"},
+};
+
+// Sensor state
+const bits={A:0,B:0,C:0,D:0,E:0};
+const sensorVals={
+  A:{v:78,unit:'bpm'},B:{v:98,unit:'%'},
+  C:{v:120,unit:'mmHg'},D:{v:16,unit:'r/m'},E:{v:36.5,unit:'°C'}
+};
+
+function getSensorBit(s,v){
+  if(s==='A') return (v<50||v>100)?1:0;
+  if(s==='B') return v<90?1:0;
+  if(s==='C') return (v<90||v>140)?1:0;
+  if(s==='D') return (v<12||v>20)?1:0;
+  if(s==='E') return (v<35.5||v>38.0)?1:0;
+  return 0;
+}
+
+function getADC(s,v){
+  const maps={
+    A:()=>Math.round((v/170)*255),
+    B:()=>Math.round((v/100)*255),
+    C:()=>Math.round((v/200)*255),
+    D:()=>Math.round((v/35)*255),
+    E:()=>Math.round(((v-34)/7)*255),
+  };
+  return '0x'+(maps[s]?maps[s]():0).toString(16).toUpperCase().padStart(2,'0');
+}
+
+function updateSensor(s,raw){
+  const v=parseFloat(raw);
+  sensorVals[s].v=v;
+  const u=sensorVals[s].unit;
+  const disp=s==='E'?v.toFixed(1)+' '+u:Math.round(v)+' '+u;
+  document.getElementById('sl-val-'+s).textContent=disp;
+  document.getElementById('sv-'+s).textContent=disp;
+  const adc=getADC(s,v);
+  document.getElementById('sb-'+s).textContent='ADC: '+adc;
+  const bit=getSensorBit(s,v);
+  bits[s]=bit;
+  const bitEl=document.getElementById('sl-bit-'+s);
+  bitEl.textContent='bit '+s+' = '+bit;
+  bitEl.className='slider-bit '+(bit?'bit1':'bit0');
+  const sc=document.getElementById('sc-'+s);
+  sc.classList.add('pulsing');
+  setTimeout(()=>sc.classList.remove('pulsing'),800);
+  const sbEl=document.getElementById('sb-'+s);
+  sbEl.className='s-bit'+(bit?' crit':'');
+}
+
+// Build cells
+function buildCells(id,count){
+  const el=document.getElementById(id);
+  el.innerHTML='';
+  for(let i=0;i<count;i++){
+    const c=document.createElement('div');
+    c.className='cell';c.id=id+'-c'+i;el.appendChild(c);
+  }
+}
+buildCells('flash-cells',48);
+buildCells('sram-cells',40);
+buildCells('eeprom-cells',32);
+// Pre-color EEPROM
+for(let i=0;i<32;i++){
+  const c=document.getElementById('eeprom-cells-c'+i);
+  if(c) c.classList.add('preload');
+}
+
+// Memory flash helpers
+function flashCells(id,indices,cls,dur=700){
+  indices.forEach(i=>{
+    const c=document.getElementById(id+'-c'+i);
+    if(!c)return;
+    c.classList.add(cls);
+    setTimeout(()=>c.classList.remove(cls),dur);
+  });
+}
+function randomIndices(pool,count){
+  const arr=[];while(arr.length<count){
+    const r=Math.floor(Math.random()*pool);
+    if(!arr.includes(r))arr.push(r);
+  }return arr;
+}
+
+// Log
+let logLines=[];
+function log(msg,type=''){
+  const d=new Date();
+  const ts=d.getHours().toString().padStart(2,'0')+':'+
+    d.getMinutes().toString().padStart(2,'0')+':'+
+    d.getSeconds().toString().padStart(2,'0');
+  logLines.unshift({msg:`[${ts}] ${msg}`,type});
+  if(logLines.length>80)logLines.pop();
+  const p=document.getElementById('log-panel');
+  p.innerHTML=logLines.map(l=>`<div class="log-line ${l.type}">${l.msg}</div>`).join('');
+}
+
+// Cycle steps
+function setStep(i){
+  for(let j=0;j<6;j++){
+    const el=document.getElementById('cs'+j);
+    el.className='cs'+(j<i?' done':j===i?' current':'');
+  }
+}
+function clearSteps(){for(let j=0;j<6;j++)document.getElementById('cs'+j).className='cs';}
+
+// Registers
+function setReg(i,val,flash=false){
+  document.getElementById('rv'+i).textContent=val;
+  const r=document.getElementById('reg'+i);
+  if(flash){r.classList.add('loaded');setTimeout(()=>r.classList.remove('loaded'),700);}
+}
+
+// ALU
+function setALU(op,detail,computing=false){
+  const el=document.getElementById('alu-op');
+  el.textContent=op;el.className='alu-op'+(computing?' computing':'');
+  document.getElementById('alu-detail').textContent=detail;
+}
+
+// GPIO
+function setGPIO(id,state,mode){
+  const el=document.getElementById('gp-'+id);
+  const st=document.getElementById('gs-'+id);
+  st.textContent=state;
+  el.className='gpio-pin'+(mode==='out'?' active-out':mode==='warn'?' active-warn':'');
+  st.className='pin-state'+(mode==='out'?' high':mode==='warn'?' warn':' ok');
+}
+
+// Packet animation on SVG bus
+function animatePkt(id,from,to,dur){
+  const el=document.getElementById(id);
+  if(!el)return;
+  let start=null;
+  el.setAttribute('cx',from);el.style.opacity='0';
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/dur,1);
+    el.setAttribute('cx',from+(to-from)*p);
+    el.style.opacity=''+(p<.15?p/.15:p>.8?(1-p)/.2:1);
+    if(p<1)requestAnimationFrame(step);
+    else el.style.opacity='0';
+  }
+  requestAnimationFrame(step);
+}
+
+// IRQ pulse
+let irqCount=0;
+function pulseIRQ(){
+  irqCount++;
+  document.getElementById('irq-count').textContent=irqCount;
+  const dot=document.getElementById('dot-irq');
+  dot.className='dot red';
+  setTimeout(()=>dot.className='dot gray',900);
+}
+
+// Harvard bus flash
+function pulseHarvard(){
+  const dot=document.getElementById('dot-harvard');
+  dot.className='dot green';
+  setTimeout(()=>dot.className='dot gray',600);
+}
+
+// ── MAIN CYCLE ──
+let running=true, speed=0, cycles=0, isRunning=false;
+const speeds=[900,400,160];
+const speedLabels=['🐢 Lento','🐇 Normal','⚡ Rápido'];
+
+function getBinKey(){return Object.values(bits).join('');}
+
+async function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function runCycle(){
+  if(isRunning)return;
+  isRunning=true;
+  while(running){
+    await doOneCycle(null);
+    await sleep(speeds[speed]*0.4);
+  }
+  isRunning=false;
+}
+
+async function doOneCycle(trigSensor){
+  cycles++;
+  document.getElementById('cycle-count').textContent=cycles;
+  const pc='0x'+cycles.toString(16).toUpperCase().padStart(4,'0');
+  setReg(5,pc,true);
+
+  const key=getBinKey();
+  const entry=TABLE[key]||TABLE["00000"];
+
+  // 1. FETCH
+  setStep(0);
+  log(`FETCH — PC=${pc} | Leyendo instrucción de Flash ROM`,'info');
+  flashCells('flash-cells',randomIndices(48,8),'exec');
+  animatePkt('pkt-instr',10,490,speeds[speed]*0.85);
+  pulseHarvard();
+  document.getElementById('status-msg').textContent='Ejecutando FETCH...';
+  await sleep(speeds[speed]);
+
+  // 2. DECODE
+  setStep(1);
+  log(`DECODE — Opcode: CMP R0..R4 | Instrucción reconocida`);
+  setALU('Decodificando...','Reconociendo instrucción CMP (comparar registros con umbrales)');
+  flashCells('sram-cells',randomIndices(40,4),'active');
+  document.getElementById('status-msg').textContent='Decodificando instrucción...';
+  await sleep(speeds[speed]);
+
+  // 3. EXECUTE
+  setStep(2);
+  if(trigSensor){
+    const u=sensorVals[trigSensor].unit;
+    const v=sensorVals[trigSensor].v;
+    const disp=trigSensor==='E'?v.toFixed(1)+' '+u:Math.round(v)+' '+u;
+    const adc=getADC(trigSensor,v);
+    log(`EXECUTE — ADC convierte sensor ${trigSensor}: ${disp} → ${adc}`,'info');
+    setALU(`ADC → ${adc}`,`Conversión analógica→digital del sensor ${trigSensor}`,true);
+    flashCells('sram-cells',randomIndices(40,6),'hot');
+    animatePkt('pkt-data',10,490,speeds[speed]*0.9);
+    const rMap={A:0,B:1,C:2,D:3,E:4};
+    setReg(rMap[trigSensor],adc,true);
+    pulseIRQ();
+  } else {
+    log(`EXECUTE — Evaluando tabla binaria: clave [${key}] → ${entry.n}`);
+    setALU(`CMP bits [${key}]`,`Comparando estado con tabla EEPROM de 32 entradas`,true);
+    flashCells('eeprom-cells',randomIndices(32,6),'exec');
+    animatePkt('pkt-data',10,250,speeds[speed]*0.7);
+  }
+  const pNum={'Baja':0,'Media':1,'Media-Alta':2,'Alta':3,'Muy Alta':4,'Crítica':5,'Máxima':6};
+  setReg(7,'0x'+(pNum[entry.p]||0).toString(16).toUpperCase().padStart(2,'0'),true);
+  document.getElementById('status-msg').textContent='Ejecutando instrucción...';
+  await sleep(speeds[speed]);
+
+  // 4. MEM ACCESS
+  setStep(3);
+  log(`MEM — STS 0x0100: guardando estado [${entry.n}] en SRAM`);
+  setALU(`STS 0x0100`,`Escribiendo resultado en memoria de datos`,false);
+  flashCells('sram-cells',randomIndices(40,8),'active');
+  flashCells('eeprom-cells',[parseInt(key,2)%32],'exec',800);
+  document.getElementById('status-msg').textContent='Accediendo a memoria...';
+  await sleep(speeds[speed]);
+
+  // 5. WRITE BACK
+  setStep(4);
+  log(`WRITEBACK — Actualizando R0–R4 con bits [${key}]`);
+  setALU(`OUT → Regs`,`Registros actualizados con estado UCI actual`,false);
+  ['A','B','C','D','E'].forEach((s,i)=>{
+    if(bits[s]) setReg(i,'0x01',true);
+    else setReg(i,'0x00');
+  });
+  flashCells('sram-cells',randomIndices(40,6),'active');
+  document.getElementById('status-msg').textContent='Escribiendo registros...';
+  await sleep(speeds[speed]);
+
+  // 6. GPIO OUT
+  setStep(5);
+  const isNivel4=entry.n==='Nivel 4';
+  const isNivel3=entry.n==='Nivel 3';
+  const isNivel2=entry.n==='Nivel 2';
+  const isNivel1=entry.n==='Nivel 1';
+
+  if(isNivel4||isNivel3){
+    log(`GPIO — 🔴 CRÍTICO: LED=HIGH | BUZZER=ON | TX: "${entry.r}"`,'err');
+    setGPIO('led','HIGH','out');setGPIO('buzz','ON','out');
+    setGPIO('disp',entry.n,'out');setGPIO('uart','TX→ ALERTA','out');
+    setGPIO('irq','FIRED!','out');
+    document.getElementById('dot-irq').className='dot red';
+  } else if(isNivel2||isNivel1){
+    log(`GPIO — ⚠️  ALERTA: LED=BLINK | BUZZER=OFF | TX: "${entry.r}"`,'warn');
+    setGPIO('led','BLINK','warn');setGPIO('buzz','OFF','ok');
+    setGPIO('disp',entry.n,'warn');setGPIO('uart','TX→ AVISO','warn');
+    setGPIO('irq','CLEAR','ok');
+  } else {
+    log(`GPIO — ✅ NORMAL: LED=LOW | BUZZER=OFF | Monitoreo continuo`);
+    setGPIO('led','LOW','ok');setGPIO('buzz','OFF','ok');
+    setGPIO('disp','NORMAL','ok');setGPIO('uart','IDLE','ok');
+    setGPIO('irq','CLEAR','ok');
+  }
+  flashCells('sram-cells',randomIndices(40,5),'out');
+  animatePkt('pkt-data',250,490,speeds[speed]*0.7);
+
+  // Update UCI panel
+  const bk=document.getElementById('bin-key');
+  bk.textContent=key;
+  bk.className='uci-key'+(isNivel4?' nivel4':isNivel3?' nivel3':isNivel2||isNivel1?' nivel2':'');
+  document.getElementById('uci-nivel').textContent=entry.n+' — Prioridad: '+entry.p;
+  document.getElementById('uci-resp').textContent=entry.r;
+  document.getElementById('status-msg').textContent='['+key+'] '+entry.n+' · '+entry.p;
+
+  clearSteps();
+  setALU('Ciclo completado',`Siguiente lectura en ${(speeds[speed]*0.4/1000).toFixed(1)}s`);
+  await sleep(speeds[speed]*0.4);
+}
+
+// Controls
+function toggleRun(){
+  running=!running;
+  const btn=document.getElementById('btn-run');
+  btn.textContent=running?'⏸ Pausar':'▶ Reanudar';
+  btn.className='btn'+(running?' active':'');
+  if(running) runCycle();
+}
+
+function cycleSpeed(){
+  speed=(speed+1)%3;
+  document.getElementById('btn-speed').textContent=speedLabels[speed];
+}
+
+function setSpeed(v){
+  speed=parseInt(v);
+  document.getElementById('speed-lbl').textContent=speedLabels[speed];
+  document.getElementById('btn-speed').textContent=speedLabels[speed];
+}
+
+function triggerManual(){
+  const keys=['A','B','C','D','E'];
+  const s=keys[Math.floor(Math.random()*keys.length)];
+  const scenarios={
+    A:[25,145],B:[80,92],C:[155,82],D:[7,26],E:[39.5,34.8]
+  };
+  const sc=scenarios[s];
+  const v=sc[Math.floor(Math.random()*sc.length)];
+  sensorVals[s].v=v;
+  bits[s]=getSensorBit(s,v);
+  const slider=document.getElementById('sl-'+s);
+  if(slider)slider.value=v;
+  updateSensor(s,v);
+  log(`EVENTO UCI — Sensor ${s} disparado con valor crítico: ${v}`,'warn');
+  if(running) doOneCycle(s);
+}
+
+function resetAll(){
+  cycles=0;irqCount=0;
+  document.getElementById('cycle-count').textContent=0;
+  document.getElementById('irq-count').textContent=0;
+  Object.keys(bits).forEach(s=>{bits[s]=0;});
+  const defaults={A:78,B:98,C:120,D:16,E:36.5};
+  Object.entries(defaults).forEach(([s,v])=>{
+    sensorVals[s].v=v;
+    const sl=document.getElementById('sl-'+s);
+    if(sl)sl.value=v;
+    updateSensor(s,v);
+  });
+  logLines=[];
+  document.getElementById('log-panel').innerHTML='';
+  log('SISTEMA RESETEADO — ATmega328P reiniciando...','info');
+  log('Tabla EEPROM: 32 estados UCI cargados en 0x000–0x0FF','info');
+}
+
+// Init
+log('SISTEMA INICIADO — Arduino ATmega328P listo','info');
+log('Arquitectura Harvard: buses de datos e instrucciones SEPARADOS','info');
+log('Flash ROM: programa cargado | EEPROM: tabla UCI lista | SRAM: inicializada','info');
+log('Ciclo de instrucción: FETCH → DECODE → EXECUTE → MEM → WRITEBACK → GPIO','info');
+runCycle();
+</script>
+</body>
+</html>
